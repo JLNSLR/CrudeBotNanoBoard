@@ -70,7 +70,7 @@ jointSensorBoardState state;
 /*--- Realtime Timing Parameters --- */
 
 //Sample Periods
-const long encoderPeriod PROGMEM =  3333; //2ms ==500Hz
+const long encoderPeriod PROGMEM =  3333; //3,33ms == 300Hz
 const long torqueSensorPeriod PROGMEM = 3333; //3,33ms == 300Hz
 const long ReadingCanInputsPeriod PROGMEM  = 200000; // 20ms = 50Hz
 
