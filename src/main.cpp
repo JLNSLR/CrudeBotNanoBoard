@@ -272,7 +272,7 @@ if(micros() - readCANInputLastTime >= ReadingCanInputsPeriod ){
   if (CAN_MSGAVAIL == CAN.checkReceive()) {  // check if data coming 
       unsigned char len = 0;
       unsigned char *msg_buffer;    
-      //CAN.readMsgBuf(&len, msg_buffer); //Problem?!!  
+      CAN.readMsgBuf(&len, msg_buffer); //Problem?!!  
       unsigned long canId = CAN.getCanId();
       switch(canId){
         case CAN_ID_STATUS_REQUEST:
