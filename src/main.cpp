@@ -10,6 +10,7 @@
 #include "SparkFun_Qwiic_Scale_NAU7802_Arduino_Library.h" // Click here to get the library: http://librarymanager/All#SparkFun_NAU7802
 #include <FastLED.h>
 #include <EEPROM.h>
+#include <avr/wdt.h>
 
 #include <avr/pgmspace.h>
 
@@ -24,18 +25,18 @@
 #define CAN_ID_LIGHT_COMMAND 0x05
 #define CAN_ID_ENCODER_COMMAND 0x06 //CAN-ID to identify command
 #define CAN_ID_TORQUESENSOR_COMMAND 0x07 //CAN-ID to identify torque sensor command
-#define CAN_ID_DEBUG_ENABLE_COMMAND 0x08 //CAN-ID to identify debug enable command
+#define CAN_ID_SENSORCONTROLLER_COMMAND 0x08 //CAN-ID to identify sensor controller command
 
 
 /* --- Board Definitions --- */
-#define JOINT_ID 5
+#define JOINT_ID 2
 
 #define  TORQUE_SENSOR_ID (JOINT_ID-1)
 /* --- Hardware Definitions --- */
 #define CAN_PIN 10
 #define ENCODERPIN 9
 
-#define LED_PIN 2 //HX_Data
+#define LED_PIN 2 //HX_data
 
 #define NUM_LEDS 12
 
@@ -49,7 +50,7 @@ NAU7802 torqueSensor; //Create instance of the NAU7802 class
 int32_t torqueData;
 int32_t torqueOffset;
 torqueDataPacket torquePaket;
-uint8_t torqueSensorGain = NAU7802_GAIN_4;
+uint8_t torqueSensorGain = NAU7802_GAIN_16;
 
 
 /*--- Magnetic rotary Encoder AS5048 --- */
@@ -94,7 +95,7 @@ void handleStatusRequest(unsigned char* msg_buffer, unsigned char len);
 void handleLightCommand(unsigned char* msg_buffer, unsigned char len);
 void handleEncoderZeroCommand(unsigned char* msg_buffer, unsigned char len);
 void handleTorqueSensorCommand(unsigned char* msg_buffer, unsigned char len);
-
+void handleSensorControllerCommand(unsigned char* msg_buffer, unsigned char len);
 void ErrorLights();
 void speedLights();
 
@@ -113,12 +114,12 @@ void storeEncoderOffset(int16_t offset){
 
 
 void setup(){
-    Serial.begin(115200);
+    Serial.begin(9600);
 
     /* --- Initialize Sensors --- */
-    encoder.init(); //Encoder
+   encoder.init(); //Encoder
 
-    Serial.println(F("Encoder initialized: "));
+   Serial.println(F("Encoder initialized: "));
     encoder.printErrors();
     encoder.printState();
 
@@ -141,7 +142,6 @@ void setup(){
         Serial.println(F("CAN BUS Shield init successful!"));
 
         //--- Set Masks --- //
-        
         CAN.init_Mask(0,0,0x7FF); //all ID Bits are relevant
         CAN.init_Mask(1,0,0x7FF);
 
@@ -152,6 +152,7 @@ void setup(){
         CAN.init_Filt(2,0,0x006);
         CAN.init_Filt(3,0,0x007);
         CAN.init_Filt(4,0,0x008);
+        CAN.init_Filt(5,0,0x004);
         
 
         break;
@@ -201,6 +202,11 @@ void setup(){
     state.torqueSensorGainVal = torqueSensorGain;
     state.torqueSensorOffsetVal = 0;
 
+    encoderPaket.joint_id = JOINT_ID;
+    torquePaket.joint_id = TORQUE_SENSOR_ID;
+
+    //wdt_enable(WDTO_1S); //start watchdog Timer, 1s
+
 
 
 
@@ -233,7 +239,7 @@ void loop()
       }
 
 
-    if(debug &&!setup_error){
+    if(debug && !setup_error){
       Serial.print(F("Reading Encoder Value: "));
       Serial.println(encoder.getRotation());
     }
@@ -262,18 +268,19 @@ void loop()
       Serial.println(torqueValue);
     }
 
+
   }
   
 
 
-
-
 if(micros() - readCANInputLastTime >= ReadingCanInputsPeriod ){   
-  if (CAN_MSGAVAIL == CAN.checkReceive()) {  // check if data coming 
+  if (CAN_MSGAVAIL == CAN.checkReceive()) {
+   
+      // check if data coming 
       unsigned char len = 0;
-      unsigned char *msg_buffer;    
-      CAN.readMsgBuf(&len, msg_buffer); //Problem?!!  
-      unsigned long canId = CAN.getCanId();
+      unsigned char msg_buffer[8];    
+      CAN.readMsgBuf(&len, msg_buffer);
+      unsigned long canId = CAN.getCanId();  
       switch(canId){
         case CAN_ID_STATUS_REQUEST:
           handleStatusRequest(msg_buffer,len);
@@ -287,6 +294,10 @@ if(micros() - readCANInputLastTime >= ReadingCanInputsPeriod ){
         case CAN_ID_LIGHT_COMMAND:
           handleLightCommand(msg_buffer,len);
           break;
+        case CAN_ID_SENSORCONTROLLER_COMMAND:
+          handleSensorControllerCommand(msg_buffer,len);
+          break;
+
     }
 
     readCANInputLastTime = micros();
@@ -294,9 +305,11 @@ if(micros() - readCANInputLastTime >= ReadingCanInputsPeriod ){
 }
 
 
+//wdt_reset();
+
 if(setup_error){
   ErrorLights();
-  Serial.println("Error");
+  Serial.println(F("Error"));
 }
 
 }
@@ -315,7 +328,31 @@ void handleStatusRequest(unsigned char* msg_buffer, unsigned char len){
 
 void handleLightCommand(unsigned char* msg_buffer, unsigned char len){
   if(msg_buffer[0] == JOINT_ID){
-    //Do something
+    lightCommand* lightCommand;
+    deSerializeLightCommand(msg_buffer,lightCommand);
+
+    #define LIGHTMODE_OFF 0
+#define LIGHTMODE_ORANGE 1
+#define LIGHTMODE_DIM 2
+#define LIGHTMODE_ERROR 3
+
+    switch (lightCommand->mode)
+    {
+    case LIGHTMODE_OFF:
+      lightsOff();
+      break;
+    case LIGHTMODE_ORANGE:
+      //toDo
+      break;
+    case LIGHTMODE_DIM:
+      dimLights();
+      break;
+    case LIGHTMODE_ERROR:
+      //toDo
+      break;
+    default:
+      break;
+    }
   }else{
     return;
   }
@@ -327,9 +364,6 @@ void handleEncoderZeroCommand(unsigned char* msg_buffer, unsigned char len){
    deSerializeEncoderZeroCommand(msg_buffer,encoderCommand);
 
    if(debug){
-
-     Serial.print(F("Received Encoder Command for Joint Sensor "));
-     Serial.println(encoderCommand->joint_id);
      Serial.print(F("Setting Encoder Zero Position to: "));
      Serial.println(encoderCommand->zeroPosition);
    }
@@ -349,11 +383,9 @@ void handleTorqueSensorCommand(unsigned char* msg_buffer, unsigned char len){
     deSerializeTorqueSensorCommand(msg_buffer,torqueSensorCommand);
 
     if(debug){
-     Serial.print(F("Received Torque Sensor Command for Joint Sensor "));
-     Serial.println(torqueSensorCommand->joint_id);
-     Serial.print(F("Setting Torque Sensor Gain to to: "));
+     Serial.print(F("Setting Torque Sensor Gain to: "));
      Serial.println(torqueSensorCommand->gain);
-     Serial.print(F("Setting Torque Offset to to: "));
+     Serial.print(F("Setting Torque Offset to: "));
      Serial.println(torqueSensorCommand->offset);
 
    }
@@ -362,6 +394,30 @@ void handleTorqueSensorCommand(unsigned char* msg_buffer, unsigned char len){
     torqueSensorGain = torqueSensorCommand->gain;
     torqueOffset = torqueSensorCommand->offset;
 
+
+  }else{
+    return;
+  }
+}
+
+void handleSensorControllerCommand(unsigned char* msg_buffer, unsigned char len){
+  if(msg_buffer[0] == JOINT_ID){
+    sensorControllerCommand* sensorCommand;
+    deSerializeSensorControllerCommand(msg_buffer,sensorCommand);
+
+  switch (sensorCommand->mode)
+  {
+  case SENSORBOARD_MODE_DEBUG_ON:
+    debug = true;
+    break;
+  case SENSORBOARD_MODE_DEBUG_OFF:
+    if(debug){
+      debug = false;
+      Serial.println("turning debug off");
+    }
+    break;
+  }
+  
 
   }else{
     return;
@@ -393,5 +449,35 @@ void ErrorLights(){
   }
   
 }
+void dimLights(){
+   if(ledsAvailable){
+    FastLED.addLeds<WS2812B,LED_PIN,GRB>(leds,NUM_LEDS);
+	  FastLED.setBrightness(30);
+
+    for(int i = 0; i<12; i++){
+      leds[i] = CRGB::Orange;
+    }
+    FastLED.show();
+      
+  }
+}
+
+void lightsOff(){
+  if(ledsAvailable){
+    FastLED.addLeds<WS2812B,LED_PIN,GRB>(leds,NUM_LEDS);
+	  FastLED.setBrightness(0);
+
+    for(int i = 0; i<12; i++){
+      leds[i] = CRGB::Orange;
+    }
+    FastLED.show();
+      
+  }
+}
+
+
+
+
+
 
 

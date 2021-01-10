@@ -4,6 +4,17 @@
 
 #include "Arduino.h"
 
+/*--- CAN-Network Definitions --- */
+#define CAN_ID_ENCODERDATA 0x00 //CAN-ID to identify encoder-angle-data of tje joint
+#define CAN_ID_TORQUESENSOR 0x01 //CAN-ID to identify torque-sensor-data of joint j-1;
+#define CAN_ID_ENCODER_ERROR 0x02 // CAN_ID to identify Encoder Error-States
+#define CAN_ID_STATUS_MSG 0x03 //CAN-ID to identify status-msgs from the joint-sensors
+#define CAN_ID_STATUS_REQUEST 0x04
+#define CAN_ID_LIGHT_COMMAND 0x05
+#define CAN_ID_ENCODER_COMMAND 0x06 //CAN-ID to identify command
+#define CAN_ID_TORQUESENSOR_COMMAND 0x07 //CAN-ID to identify torque sensor command
+#define CAN_ID_SENSORCONTROLLER_COMMAND 0x08 //CAN-ID to identify sensor controller command
+
 
 #define ENCODERPAKET_SIZE 3
 struct encoderDataPacket{
@@ -37,8 +48,24 @@ struct torqueSensorCommand{
     uint8_t gain;
     int32_t offset;
 };
+
+
+#define LIGHTMODE_OFF 0
+#define LIGHTMODE_ORANGE 1
+#define LIGHTMODE_DIM 2
+#define LIGHTMODE_ERROR 3
+
+
 #define LIGHTCOMMAND_PAKET_SIZE 2
 struct lightCommand{
+    uint8_t joint_id;
+    uint8_t mode;
+};
+
+#define SENSORCONTROLLER_COMMAND_SIZE 2
+#define SENSORBOARD_MODE_DEBUG_ON 0
+#define SENSORBOARD_MODE_DEBUG_OFF 1
+struct sensorControllerCommand{
     uint8_t joint_id;
     uint8_t mode;
 };
@@ -67,8 +94,9 @@ void serializeLightCommand(uint8_t * bytes, const lightCommand* dataPaket);
 
 void deSerializeLightCommand(const uint8_t* bytes, lightCommand* dataPaket);
 
+void serializeSensorControllerCommand(uint8_t * bytes, const sensorControllerCommand* dataPaket);
 
-
+void deSerializeSensorControllerCommand(const uint8_t* bytes, sensorControllerCommand* dataPaket);
 
 
 

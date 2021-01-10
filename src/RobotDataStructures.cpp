@@ -79,3 +79,13 @@ void deSerializeLightCommand(const uint8_t* bytes, lightCommand* dataPaket){
     dataPaket->joint_id = bytes[0];
     dataPaket->mode = bytes[1];
 }
+
+void serializeSensorControllerCommand(uint8_t * bytes, const sensorControllerCommand* dataPaket){
+    bytes[0] = dataPaket->joint_id;
+    bytes[1] = dataPaket->mode;
+}
+
+void deSerializeSensorControllerCommand(const uint8_t* bytes, sensorControllerCommand* dataPaket){
+    dataPaket->joint_id = bytes[0];
+    dataPaket->mode = bytes[1];
+}
