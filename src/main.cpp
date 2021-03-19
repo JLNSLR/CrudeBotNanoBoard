@@ -30,27 +30,30 @@
 
 /* --- Board Definitions --- */
 #define JOINT_ID 2
-
 #define  TORQUE_SENSOR_ID (JOINT_ID-1)
+
 /* --- Hardware Definitions --- */
 #define CAN_PIN 10
 #define ENCODERPIN 9
-
 #define LED_PIN 2 //HX_data
-
 #define NUM_LEDS 12
+
+#define TORQUESENSOR_AVAILABLE
+#define LEDS_AVAILABLE
 
 /*--- Global Data Structures --- */
 
 
 CRGB leds[NUM_LEDS];
 
+#ifdef TORQUESENSOR_AVAILABLE
 /*--- Torque Sensor width NAU7802-Amplifier and ADC --- */
 NAU7802 torqueSensor; //Create instance of the NAU7802 class
 int32_t torqueData;
 int32_t torqueOffset;
 torqueDataPacket torquePaket;
 uint8_t torqueSensorGain = NAU7802_GAIN_16;
+#endif //TORQUESENSOR_AVAILABLE
 
 
 /*--- Magnetic rotary Encoder AS5048 --- */
@@ -71,9 +74,10 @@ jointSensorBoardState state;
 /*--- Realtime Timing Parameters --- */
 
 //Sample Periods
-const long encoderPeriod PROGMEM =  3333; //3,33ms == 300Hz
-const long torqueSensorPeriod PROGMEM = 3333; //3,33ms == 300Hz
-const long ReadingCanInputsPeriod PROGMEM  = 200000; // 20ms = 50Hz
+#define EMPIRIC_DELAY 900
+const long encoderPeriod PROGMEM =  3333-EMPIRIC_DELAY; //3,33ms == 300Hz
+const long torqueSensorPeriod PROGMEM = 3333-EMPIRIC_DELAY; //3,33ms == 300Hz
+const long ReadingCanInputsPeriod PROGMEM  = 10000; // 10ms = 100Hz
 
 //Sample Period Tracking Variables
 long encoderLastTime = 0;
@@ -85,8 +89,6 @@ long blinkTime = 0;
 /*--- System state flags --- */
 bool debug = true;
 bool setup_error = false;
-bool torqueSensorAvailable = true;
-bool ledsAvailable = true;
 
 
 /* --- Sensor Board functions --- */
@@ -97,7 +99,9 @@ void handleEncoderZeroCommand(unsigned char* msg_buffer, unsigned char len);
 void handleTorqueSensorCommand(unsigned char* msg_buffer, unsigned char len);
 void handleSensorControllerCommand(unsigned char* msg_buffer, unsigned char len);
 void ErrorLights();
-void speedLights();
+void lightsOff();
+void controlLightsRGB(uint8_t r, uint8_t g, uint8_t b);
+void controlLightsHSV(uint8_t h, uint8_t s, uint8_t v);
 
 int16_t getEncoderOffset(){
   int16_t offset;
@@ -114,27 +118,26 @@ void storeEncoderOffset(int16_t offset){
 
 
 void setup(){
-    Serial.begin(9600);
+  Serial.begin(115200);
 
-    /* --- Initialize Sensors --- */
-   encoder.init(); //Encoder
+  /* --- Initialize Sensors --- */
+  encoder.init(); //Encoder
 
-   Serial.println(F("Encoder initialized: "));
-    encoder.printErrors();
-    encoder.printState();
+  Serial.println(F("Encoder initialized: "));
+  encoder.printErrors();
+  encoder.printState();
 
-    //Torque Sensor
+    //Torque Sensor Initialization
+    #ifdef TORQUESENSOR_AVAILABLE
     Wire.begin();
-    if(torqueSensorAvailable){
-      if(torqueSensor.begin()){
+    if(torqueSensor.begin()){
         Serial.println(F("NAU7802 initialized"));
         torqueSensor.setSampleRate(320);
         torqueSensor.setGain(torqueSensorGain);
       }else{
           Serial.println(F("NAU7802 initialization failed"));
-          torqueSensorAvailable = false;
       }
-    }
+    #endif //TORQUESENSOR_AVAILABLE
 
       /* --- Initialize CAN Communication --- */
     for(int i = 0; i < 100; i++){
@@ -169,7 +172,7 @@ void setup(){
     }
 
   /* --- Initiate LED-RING --- */
-  if(ledsAvailable){
+  #ifdef LEDS_AVAILABLE
     FastLED.addLeds<WS2812B,LED_PIN,GRB>(leds,NUM_LEDS);
 	  FastLED.setBrightness(80);
 
@@ -177,8 +180,7 @@ void setup(){
       leds[i] = CRGB::Orange;
     }
     FastLED.show();
-      
-  }
+  #endif //LEDS_AVAILABLE
 
 
   if(setup_error){
@@ -205,10 +207,7 @@ void setup(){
     encoderPaket.joint_id = JOINT_ID;
     torquePaket.joint_id = TORQUE_SENSOR_ID;
 
-    //wdt_enable(WDTO_1S); //start watchdog Timer, 1s
-
-
-
+    wdt_enable(WDTO_1S); //start watchdog Timer, 1s
 
 }
 
@@ -246,7 +245,7 @@ void loop()
   }
 
   
-
+#ifdef TORQUESENSOR_AVAILABLE
   if(micros() - torqueLastTime >= torqueSensorPeriod){
 
     int32_t torqueValue = torqueSensor.getReading();
@@ -259,17 +258,15 @@ void loop()
 
     //send Torquesensor Data via CAN BUS
     CAN.sendMsgBuf(CAN_ID_TORQUESENSOR,0,TORQUEPAKET_SIZE,torque_bytes);
-
-    
-
+    torqueLastTime = micros();
 
   if(debug){
       Serial.print(F("Reading Torque Value: "));
       Serial.println(torqueValue);
     }
 
-
   }
+  #endif //TORQUESENSOR_AVAILABLE
   
 
 
@@ -305,10 +302,12 @@ if(micros() - readCANInputLastTime >= ReadingCanInputsPeriod ){
 }
 
 
-//wdt_reset();
+wdt_reset();
 
 if(setup_error){
+  #ifdef LEDS_AVAILABLE
   ErrorLights();
+  #endif //LEDS_AVAILABLE
   Serial.println(F("Error"));
 }
 
@@ -332,9 +331,10 @@ void handleLightCommand(unsigned char* msg_buffer, unsigned char len){
     deSerializeLightCommand(msg_buffer,lightCommand);
 
     #define LIGHTMODE_OFF 0
-#define LIGHTMODE_ORANGE 1
-#define LIGHTMODE_DIM 2
-#define LIGHTMODE_ERROR 3
+    #define LIGHTMODE_ORANGE 1
+    #define LIGHTMODE_ERROR 2
+    #define LIGHTMODE_SET_RGB 3
+    #define LIGHTMODE_SET_HSV 4
 
     switch (lightCommand->mode)
     {
@@ -344,12 +344,16 @@ void handleLightCommand(unsigned char* msg_buffer, unsigned char len){
     case LIGHTMODE_ORANGE:
       //toDo
       break;
-    case LIGHTMODE_DIM:
-      dimLights();
-      break;
     case LIGHTMODE_ERROR:
       //toDo
       break;
+    case LIGHTMODE_SET_RGB:
+      controlLightsRGB(lightCommand->value_0,lightCommand->value_1,lightCommand->value_2);
+      break;
+    case LIGHTMODE_SET_HSV:
+      controlLightsHSV(lightCommand->value_0,lightCommand->value_1,lightCommand->value_2);
+      break;
+
     default:
       break;
     }
@@ -449,30 +453,29 @@ void ErrorLights(){
   }
   
 }
-void dimLights(){
-   if(ledsAvailable){
-    FastLED.addLeds<WS2812B,LED_PIN,GRB>(leds,NUM_LEDS);
-	  FastLED.setBrightness(30);
-
-    for(int i = 0; i<12; i++){
-      leds[i] = CRGB::Orange;
-    }
-    FastLED.show();
-      
-  }
-}
 
 void lightsOff(){
-  if(ledsAvailable){
-    FastLED.addLeds<WS2812B,LED_PIN,GRB>(leds,NUM_LEDS);
-	  FastLED.setBrightness(0);
+	FastLED.setBrightness(0);
 
-    for(int i = 0; i<12; i++){
-      leds[i] = CRGB::Orange;
-    }
-    FastLED.show();
-      
+  for(int i = 0; i<12; i++){
+    leds[i].r = CRGB::Black;
   }
+  FastLED.show();
+      
+}
+
+void controlLightsRGB(uint8_t r, uint8_t g, uint8_t b){
+  for(int i = 0; i<12; i++){
+        leds[i].setRGB(r,g,b);
+        
+      }
+      FastLED.show();
+}
+void controlLightsHSV(uint8_t h, uint8_t s, uint8_t v){
+  for(int i = 0; i<12; i++){
+        leds[i].setHSV(h,s,v);
+      }
+      FastLED.show();
 }
 
 
