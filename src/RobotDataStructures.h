@@ -50,16 +50,14 @@ struct torqueSensorCommand{
 };
 
 
-#define LIGHTMODE_OFF 0
-#define LIGHTMODE_ORANGE 1
-#define LIGHTMODE_DIM 2
-#define LIGHTMODE_ERROR 3
 
 
-#define LIGHTCOMMAND_PAKET_SIZE 2
+#define LIGHTCOMMAND_PAKET_SIZE 4
 struct lightCommand{
     uint8_t joint_id;
-    uint8_t mode;
+    uint8_t value_0;
+    uint8_t value_1;
+    uint8_t value_2;
 };
 
 #define SENSORCONTROLLER_COMMAND_SIZE 2
