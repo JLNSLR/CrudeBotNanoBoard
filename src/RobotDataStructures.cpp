@@ -73,11 +73,17 @@ void deSerializeTorqueSensorCommand(const uint8_t* bytes, torqueSensorCommand* d
 void serializeLightCommand(uint8_t * bytes, const lightCommand* dataPaket){
     bytes[0] = dataPaket->joint_id;
     bytes[1] = dataPaket->mode;
+    bytes[2] = dataPaket->value_0;
+    bytes[3] = dataPaket->value_1;
+    bytes[4] = dataPaket->value_2;
 }
 
 void deSerializeLightCommand(const uint8_t* bytes, lightCommand* dataPaket){
     dataPaket->joint_id = bytes[0];
     dataPaket->mode = bytes[1];
+    dataPaket->value_0 = bytes[2];
+    dataPaket->value_1 = bytes[3];
+    dataPaket->value_2 = bytes[4];
 }
 
 void serializeSensorControllerCommand(uint8_t * bytes, const sensorControllerCommand* dataPaket){

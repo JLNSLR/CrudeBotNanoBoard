@@ -3,7 +3,6 @@
 
 
 #include "Arduino.h"
-
 /*--- CAN-Network Definitions --- */
 #define CAN_ID_ENCODERDATA 0x00 //CAN-ID to identify encoder-angle-data of tje joint
 #define CAN_ID_TORQUESENSOR 0x01 //CAN-ID to identify torque-sensor-data of joint j-1;
@@ -48,13 +47,10 @@ struct torqueSensorCommand{
     uint8_t gain;
     int32_t offset;
 };
-
-
-
-
-#define LIGHTCOMMAND_PAKET_SIZE 4
+#define LIGHTCOMMAND_PAKET_SIZE 5
 struct lightCommand{
     uint8_t joint_id;
+    uint8_t mode;
     uint8_t value_0;
     uint8_t value_1;
     uint8_t value_2;
