@@ -50,6 +50,9 @@ struct torqueSensorCommand
     int32_t offset;
 };
 #define LIGHTCOMMAND_PAKET_SIZE 5
+#define LIGHTCOMMAND_OFF 0
+#define LIGHTCOMMAND_RGB 1
+#define LIGHTCOMMAND_HSV 2
 struct lightCommand
 {
     uint8_t joint_id;
