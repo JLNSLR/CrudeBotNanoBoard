@@ -17,20 +17,19 @@
 /*--- Global Robot Definitions --- */
 
 /*--- CAN-Network Definitions --- */
-#define CAN_ID_ENCODERDATA 0x00 //CAN-ID to identify encoder-angle-data of tje joint
-#define CAN_ID_TORQUESENSOR 0x01 //CAN-ID to identify torque-sensor-data of joint j-1;
+#define CAN_ID_ENCODERDATA 0x00   //CAN-ID to identify encoder-angle-data of tje joint
+#define CAN_ID_TORQUESENSOR 0x01  //CAN-ID to identify torque-sensor-data of joint j-1;
 #define CAN_ID_ENCODER_ERROR 0x02 // CAN_ID to identify Encoder Error-States
-#define CAN_ID_STATUS_MSG 0x03 //CAN-ID to identify status-msgs from the joint-sensors
+#define CAN_ID_STATUS_MSG 0x03    //CAN-ID to identify status-msgs from the joint-sensors
 #define CAN_ID_STATUS_REQUEST 0x04
 #define CAN_ID_LIGHT_COMMAND 0x05
-#define CAN_ID_ENCODER_COMMAND 0x06 //CAN-ID to identify command
-#define CAN_ID_TORQUESENSOR_COMMAND 0x07 //CAN-ID to identify torque sensor command
+#define CAN_ID_ENCODER_COMMAND 0x06          //CAN-ID to identify command
+#define CAN_ID_TORQUESENSOR_COMMAND 0x07     //CAN-ID to identify torque sensor command
 #define CAN_ID_SENSORCONTROLLER_COMMAND 0x08 //CAN-ID to identify sensor controller command
-
 
 /* --- Board Definitions --- */
 #define JOINT_ID 2
-#define  TORQUE_SENSOR_ID (JOINT_ID-1)
+#define TORQUE_SENSOR_ID (JOINT_ID - 1)
 
 /* --- Hardware Definitions --- */
 #define CAN_PIN 10
@@ -43,7 +42,6 @@
 
 /*--- Global Data Structures --- */
 
-
 CRGB leds[NUM_LEDS];
 
 #ifdef TORQUESENSOR_AVAILABLE
@@ -55,29 +53,26 @@ torqueDataPacket torquePaket;
 uint8_t torqueSensorGain = NAU7802_GAIN_16;
 #endif //TORQUESENSOR_AVAILABLE
 
-
 /*--- Magnetic rotary Encoder AS5048 --- */
-int16_t encoderData; 
+int16_t encoderData;
 AS5048A encoder(ENCODERPIN);
 encoderDataPacket encoderPaket;
 
 int16_t encoderOffset = 0;
 const int eeOffsetAddress = 0;
 
-
 /*--- CAN Controller IC MCP2515 --- */
-MCP_CAN CAN(CAN_PIN);        
+MCP_CAN CAN(CAN_PIN);
 
 jointSensorBoardState state;
-
 
 /*--- Realtime Timing Parameters --- */
 
 //Sample Periods
 #define EMPIRIC_DELAY 900
-const long encoderPeriod PROGMEM =  3333-EMPIRIC_DELAY; //3,33ms == 300Hz
-const long torqueSensorPeriod PROGMEM = 3333-EMPIRIC_DELAY; //3,33ms == 300Hz
-const long ReadingCanInputsPeriod PROGMEM  = 10000; // 10ms = 100Hz
+const long encoderPeriod PROGMEM = 3333 - EMPIRIC_DELAY;      //3,33ms == 300Hz
+const long torqueSensorPeriod PROGMEM = 3333 - EMPIRIC_DELAY; //3,33ms == 300Hz
+const long ReadingCanInputsPeriod PROGMEM = 10000;            // 10ms = 100Hz
 
 //Sample Period Tracking Variables
 long encoderLastTime = 0;
@@ -85,39 +80,36 @@ long torqueLastTime = 0;
 long readCANInputLastTime = 0;
 long blinkTime = 0;
 
-
 /*--- System state flags --- */
 bool debug = true;
 bool setup_error = false;
 
-
 /* --- Sensor Board functions --- */
 
-void handleStatusRequest(unsigned char* msg_buffer, unsigned char len);
-void handleLightCommand(unsigned char* msg_buffer, unsigned char len);
-void handleEncoderZeroCommand(unsigned char* msg_buffer, unsigned char len);
-void handleTorqueSensorCommand(unsigned char* msg_buffer, unsigned char len);
-void handleSensorControllerCommand(unsigned char* msg_buffer, unsigned char len);
+void handleStatusRequest(unsigned char *msg_buffer, unsigned char len);
+void handleLightCommand(unsigned char *msg_buffer, unsigned char len);
+void handleEncoderZeroCommand(unsigned char *msg_buffer, unsigned char len);
+void handleTorqueSensorCommand(unsigned char *msg_buffer, unsigned char len);
+void handleSensorControllerCommand(unsigned char *msg_buffer, unsigned char len);
 void ErrorLights();
 void lightsOff();
 void controlLightsRGB(uint8_t r, uint8_t g, uint8_t b);
 void controlLightsHSV(uint8_t h, uint8_t s, uint8_t v);
 
-int16_t getEncoderOffset(){
+int16_t getEncoderOffset()
+{
   int16_t offset;
-  EEPROM.get(eeOffsetAddress,offset);
+  EEPROM.get(eeOffsetAddress, offset);
   return offset;
 };
 
-
-void storeEncoderOffset(int16_t offset){
-  EEPROM.put(eeOffsetAddress,offset);
+void storeEncoderOffset(int16_t offset)
+{
+  EEPROM.put(eeOffsetAddress, offset);
 };
 
-
-
-
-void setup(){
+void setup()
+{
   Serial.begin(115200);
 
   /* --- Initialize Sensors --- */
@@ -127,126 +119,136 @@ void setup(){
   encoder.printErrors();
   encoder.printState();
 
-    //Torque Sensor Initialization
-    #ifdef TORQUESENSOR_AVAILABLE
-    Wire.begin();
-    if(torqueSensor.begin()){
-        Serial.println(F("NAU7802 initialized"));
-        torqueSensor.setSampleRate(320);
-        torqueSensor.setGain(torqueSensorGain);
-      }else{
-          Serial.println(F("NAU7802 initialization failed"));
-      }
-    #endif //TORQUESENSOR_AVAILABLE
+//Torque Sensor Initialization
+#ifdef TORQUESENSOR_AVAILABLE
+  Wire.begin();
+  if (torqueSensor.begin())
+  {
+    Serial.println(F("NAU7802 initialized"));
+    torqueSensor.setSampleRate(320);
+    torqueSensor.setGain(torqueSensorGain);
+  }
+  else
+  {
+    Serial.println(F("NAU7802 initialization failed"));
+  }
+#endif //TORQUESENSOR_AVAILABLE
 
-      /* --- Initialize CAN Communication --- */
-    for(int i = 0; i < 100; i++){
-      if(CAN_OK == CAN.begin(CAN_1000KBPS, MCP_8MHz)){                // init can bus : baudrate = 1000k
-        Serial.println(F("CAN BUS Shield init successful!"));
+  /* --- Initialize CAN Communication --- */
+  for (int i = 0; i < 100; i++)
+  {
+    if (CAN_OK == CAN.begin(CAN_1000KBPS, MCP_8MHz))
+    { // init can bus : baudrate = 1000k
+      Serial.println(F("CAN BUS Shield init successful!"));
 
-        //--- Set Masks --- //
-        CAN.init_Mask(0,0,0x7FF); //all ID Bits are relevant
-        CAN.init_Mask(1,0,0x7FF);
+      //--- Set Masks --- //
+      CAN.init_Mask(0, 0, 0x7FF); //all ID Bits are relevant
+      CAN.init_Mask(1, 0, 0x7FF);
 
-        //--- Set Filters --- //
-        // we can receive CAN-Messages width IDs from 0x004 - 0x008
-        CAN.init_Filt(0,0,0x004);
-        CAN.init_Filt(1,0,0x005);
-        CAN.init_Filt(2,0,0x006);
-        CAN.init_Filt(3,0,0x007);
-        CAN.init_Filt(4,0,0x008);
-        CAN.init_Filt(5,0,0x004);
-        
+      //--- Set Filters --- //
+      // we can receive CAN-Messages width IDs from 0x004 - 0x008
+      CAN.init_Filt(0, 0, 0x004);
+      CAN.init_Filt(1, 0, 0x005);
+      CAN.init_Filt(2, 0, 0x006);
+      CAN.init_Filt(3, 0, 0x007);
+      CAN.init_Filt(4, 0, 0x008);
+      CAN.init_Filt(5, 0, 0x004);
 
-        break;
-      }
-      else
+      break;
+    }
+    else
+    {
+      Serial.println(F("CAN BUS Shield init fail"));
+      Serial.println(F("Init CAN BUS Shield again"));
+      delay(5);
+      if (i == 99)
       {
-        Serial.println(F("CAN BUS Shield init fail"));
-        Serial.println(F("Init CAN BUS Shield again"));
-        delay(5);
-        if(i == 99){
-          setup_error = true;
-        }
+        setup_error = true;
       }
     }
+  }
 
-  /* --- Initiate LED-RING --- */
-  #ifdef LEDS_AVAILABLE
-    FastLED.addLeds<WS2812B,LED_PIN,GRB>(leds,NUM_LEDS);
-	  FastLED.setBrightness(80);
+/* --- Initiate LED-RING --- */
+#ifdef LEDS_AVAILABLE
+  FastLED.addLeds<WS2812B, LED_PIN, GRB>(leds, NUM_LEDS);
+  FastLED.setBrightness(80);
 
-    for(int i = 0; i<12; i++){
-      leds[i] = CRGB::Orange;
-    }
-    FastLED.show();
-  #endif //LEDS_AVAILABLE
+  for (int i = 0; i < 12; i++)
+  {
+    leds[i] = CRGB::Orange;
+  }
+  FastLED.show();
+#endif //LEDS_AVAILABLE
 
-
-  if(setup_error){
- 
+  if (setup_error)
+  {
 
     Serial.print(F("Initialization of Joint-Sensor-CAN-Board at Joint "));
     Serial.print(JOINT_ID);
     Serial.println(F(" failed"));
-    }else{
+  }
+  else
+  {
 
     Serial.print(F("Initialization of Joint-Sensor-CAN-Board at Joint "));
     Serial.print(JOINT_ID);
     Serial.println(F(" was successful."));
-
   }
 
-    // --- Initial State Paket Setup --- //
-    state.encoderError = false;
-    state.joint_id = JOINT_ID;
-    state.torqueSensor_id = TORQUE_SENSOR_ID;
-    state.torqueSensorGainVal = torqueSensorGain;
-    state.torqueSensorOffsetVal = 0;
+  // --- Initial State Paket Setup --- //
+  state.encoderError = false;
+  state.joint_id = JOINT_ID;
+  state.torqueSensor_id = TORQUE_SENSOR_ID;
+  state.torqueSensorGainVal = torqueSensorGain;
+  state.torqueSensorOffsetVal = 0;
 
-    encoderPaket.joint_id = JOINT_ID;
-    torquePaket.joint_id = TORQUE_SENSOR_ID;
+  encoderPaket.joint_id = JOINT_ID;
+  torquePaket.joint_id = TORQUE_SENSOR_ID;
 
-    wdt_enable(WDTO_1S); //start watchdog Timer, 1s
-
+  wdt_enable(WDTO_1S); //start watchdog Timer, 1s
 }
 
 void loop()
 {
-  
-  if(micros() - encoderLastTime >= encoderPeriod ){    
-      //Read Value from Sensor and put it into the buffer
-      encoderPaket.encoderValue = encoder.getRotation();
 
-      //Serialize the encoderData for Sending
-      uint8_t bytes[ENCODERPAKET_SIZE];
-      serializeEncoderData(bytes,&encoderPaket);
+  if (micros() - encoderLastTime >= encoderPeriod)
+  {
+    //Read Value from Sensor and put it into the buffer
+    encoderPaket.encoderValue = encoder.getRotation();
 
-      //Send Encoder Data via CAN BUS
-      CAN.sendMsgBuf(CAN_ID_ENCODERDATA,0,ENCODERPAKET_SIZE,bytes);
-      encoderLastTime = micros();
+    //Serialize the encoderData for Sending
+    uint8_t bytes[ENCODERPAKET_SIZE];
+    serializeEncoderData(bytes, &encoderPaket);
 
-      if(encoder.error()){
-        Serial.println(F("Encoder Error"));
-        encoder.printErrors();
-        encoder.printState();
-        setup_error = true;
-      }else{
-        if(setup_error){
-          setup_error = false;
-        }
+    //Send Encoder Data via CAN BUS
+    CAN.sendMsgBuf(CAN_ID_ENCODERDATA, 0, ENCODERPAKET_SIZE, bytes);
+    encoderLastTime = micros();
+
+    if (encoder.error())
+    {
+      Serial.println(F("Encoder Error"));
+      encoder.printErrors();
+      encoder.printState();
+      setup_error = true;
+    }
+    else
+    {
+      if (setup_error)
+      {
+        setup_error = false;
       }
+    }
 
-
-    if(debug && !setup_error){
+    if (debug && !setup_error)
+    {
       Serial.print(F("Reading Encoder Value: "));
       Serial.println(encoder.getRotation());
     }
   }
 
-  
 #ifdef TORQUESENSOR_AVAILABLE
-  if(micros() - torqueLastTime >= torqueSensorPeriod){
+  if (micros() - torqueLastTime >= torqueSensorPeriod)
+  {
 
     int32_t torqueValue = torqueSensor.getReading();
 
@@ -254,233 +256,239 @@ void loop()
 
     //Serialize the TorqueData for Sending
     uint8_t torque_bytes[TORQUEPAKET_SIZE];
-    serializeTorqueData(torque_bytes,&torquePaket);
+    serializeTorqueData(torque_bytes, &torquePaket);
 
     //send Torquesensor Data via CAN BUS
-    CAN.sendMsgBuf(CAN_ID_TORQUESENSOR,0,TORQUEPAKET_SIZE,torque_bytes);
+    CAN.sendMsgBuf(CAN_ID_TORQUESENSOR, 0, TORQUEPAKET_SIZE, torque_bytes);
     torqueLastTime = micros();
 
-  if(debug){
+    if (debug)
+    {
       Serial.print(F("Reading Torque Value: "));
       Serial.println(torqueValue);
     }
-
   }
-  #endif //TORQUESENSOR_AVAILABLE
-  
+#endif //TORQUESENSOR_AVAILABLE
 
+  if (micros() - readCANInputLastTime >= ReadingCanInputsPeriod)
+  {
+    if (CAN_MSGAVAIL == CAN.checkReceive())
+    {
 
-if(micros() - readCANInputLastTime >= ReadingCanInputsPeriod ){   
-  if (CAN_MSGAVAIL == CAN.checkReceive()) {
-   
-      // check if data coming 
+      // check if data coming
       unsigned char len = 0;
-      unsigned char msg_buffer[8];    
+      unsigned char msg_buffer[8];
       CAN.readMsgBuf(&len, msg_buffer);
-      unsigned long canId = CAN.getCanId();  
-      switch(canId){
-        case CAN_ID_STATUS_REQUEST:
-          handleStatusRequest(msg_buffer,len);
-          break;
-        case CAN_ID_ENCODER_COMMAND:
-          handleEncoderZeroCommand(msg_buffer,len);
-          break;
-        case CAN_ID_TORQUESENSOR_COMMAND:
-          handleTorqueSensorCommand(msg_buffer,len);
-          break;
-        case CAN_ID_LIGHT_COMMAND:
-          handleLightCommand(msg_buffer,len);
-          break;
-        case CAN_ID_SENSORCONTROLLER_COMMAND:
-          handleSensorControllerCommand(msg_buffer,len);
-          break;
+      unsigned long canId = CAN.getCanId();
+      switch (canId)
+      {
+      case CAN_ID_STATUS_REQUEST:
+        handleStatusRequest(msg_buffer, len);
+        break;
+      case CAN_ID_ENCODER_COMMAND:
+        handleEncoderZeroCommand(msg_buffer, len);
+        break;
+      case CAN_ID_TORQUESENSOR_COMMAND:
+        handleTorqueSensorCommand(msg_buffer, len);
+        break;
+      case CAN_ID_LIGHT_COMMAND:
+        handleLightCommand(msg_buffer, len);
+        break;
+      case CAN_ID_SENSORCONTROLLER_COMMAND:
+        handleSensorControllerCommand(msg_buffer, len);
+        break;
+      }
 
+      readCANInputLastTime = micros();
     }
+  }
 
-    readCANInputLastTime = micros();
+  wdt_reset();
+
+  if (setup_error)
+  {
+#ifdef LEDS_AVAILABLE
+    ErrorLights();
+#endif //LEDS_AVAILABLE
+    Serial.println(F("Error"));
   }
 }
 
+void handleStatusRequest(unsigned char *msg_buffer, unsigned char len)
+{
 
-wdt_reset();
-
-if(setup_error){
-  #ifdef LEDS_AVAILABLE
-  ErrorLights();
-  #endif //LEDS_AVAILABLE
-  Serial.println(F("Error"));
-}
-
-}
-
-void handleStatusRequest(unsigned char* msg_buffer, unsigned char len){
-  
-  if(msg_buffer[0] == JOINT_ID){
+  if (msg_buffer[0] == JOINT_ID)
+  {
     uint8_t *bytes;
-    serializeJointStateData(bytes ,&state);
-    CAN.sendMsgBuf(CAN_ID_STATUS_MSG,0,JOINTSTATE_PAKET_SIZE,bytes);
-  }else{
+    serializeJointStateData(bytes, &state);
+    CAN.sendMsgBuf(CAN_ID_STATUS_MSG, 0, JOINTSTATE_PAKET_SIZE, bytes);
+  }
+  else
+  {
     return;
   }
 };
 
+void handleLightCommand(unsigned char *msg_buffer, unsigned char len)
+{
+  if (msg_buffer[0] == JOINT_ID)
+  {
+    lightCommand *lightCommand;
+    deSerializeLightCommand(msg_buffer, lightCommand);
 
-void handleLightCommand(unsigned char* msg_buffer, unsigned char len){
-  if(msg_buffer[0] == JOINT_ID){
-    lightCommand* lightCommand;
-    deSerializeLightCommand(msg_buffer,lightCommand);
-
-    #define LIGHTMODE_OFF 0
-    #define LIGHTMODE_ORANGE 1
-    #define LIGHTMODE_ERROR 2
-    #define LIGHTMODE_SET_RGB 3
-    #define LIGHTMODE_SET_HSV 4
+#define LIGHTMODE_OFF 0
+#define LIGHTMODE_SET_RGB 1
+#define LIGHTMODE_SET_HSV 2
 
     switch (lightCommand->mode)
     {
     case LIGHTMODE_OFF:
       lightsOff();
       break;
-    case LIGHTMODE_ORANGE:
-      //toDo
-      break;
-    case LIGHTMODE_ERROR:
-      //toDo
-      break;
     case LIGHTMODE_SET_RGB:
-      controlLightsRGB(lightCommand->value_0,lightCommand->value_1,lightCommand->value_2);
+      controlLightsRGB(lightCommand->value_0, lightCommand->value_1, lightCommand->value_2);
       break;
     case LIGHTMODE_SET_HSV:
-      controlLightsHSV(lightCommand->value_0,lightCommand->value_1,lightCommand->value_2);
+      controlLightsHSV(lightCommand->value_0, lightCommand->value_1, lightCommand->value_2);
       break;
 
     default:
       break;
     }
-  }else{
+  }
+  else
+  {
     return;
   }
 };
 
-void handleEncoderZeroCommand(unsigned char* msg_buffer, unsigned char len){
- if(msg_buffer[0] == JOINT_ID){
-   encoderZeroCommand* encoderCommand;
-   deSerializeEncoderZeroCommand(msg_buffer,encoderCommand);
+void handleEncoderZeroCommand(unsigned char *msg_buffer, unsigned char len)
+{
+  if (msg_buffer[0] == JOINT_ID)
+  {
+    encoderZeroCommand *encoderCommand;
+    deSerializeEncoderZeroCommand(msg_buffer, encoderCommand);
 
-   if(debug){
-     Serial.print(F("Setting Encoder Zero Position to: "));
-     Serial.println(encoderCommand->zeroPosition);
-   }
+    if (debug)
+    {
+      Serial.print(F("Setting Encoder Zero Position to: "));
+      Serial.println(encoderCommand->zeroPosition);
+    }
 
-   storeEncoderOffset(encoderCommand->zeroPosition);
- }else{
+    storeEncoderOffset(encoderCommand->zeroPosition);
+  }
+  else
+  {
     return;
   }
 }
 
+void handleTorqueSensorCommand(unsigned char *msg_buffer, unsigned char len)
+{
+  if (msg_buffer[0] == JOINT_ID)
+  {
+    torqueSensorCommand *torqueSensorCommand;
+    deSerializeTorqueSensorCommand(msg_buffer, torqueSensorCommand);
 
-
-
-void handleTorqueSensorCommand(unsigned char* msg_buffer, unsigned char len){
-  if(msg_buffer[0] == JOINT_ID){
-    torqueSensorCommand* torqueSensorCommand;
-    deSerializeTorqueSensorCommand(msg_buffer,torqueSensorCommand);
-
-    if(debug){
-     Serial.print(F("Setting Torque Sensor Gain to: "));
-     Serial.println(torqueSensorCommand->gain);
-     Serial.print(F("Setting Torque Offset to: "));
-     Serial.println(torqueSensorCommand->offset);
-
-   }
+    if (debug)
+    {
+      Serial.print(F("Setting Torque Sensor Gain to: "));
+      Serial.println(torqueSensorCommand->gain);
+      Serial.print(F("Setting Torque Offset to: "));
+      Serial.println(torqueSensorCommand->offset);
+    }
 
     torqueSensor.setGain(torqueSensorCommand->gain);
     torqueSensorGain = torqueSensorCommand->gain;
     torqueOffset = torqueSensorCommand->offset;
-
-
-  }else{
-    return;
   }
-}
-
-void handleSensorControllerCommand(unsigned char* msg_buffer, unsigned char len){
-  if(msg_buffer[0] == JOINT_ID){
-    sensorControllerCommand* sensorCommand;
-    deSerializeSensorControllerCommand(msg_buffer,sensorCommand);
-
-  switch (sensorCommand->mode)
+  else
   {
-  case SENSORBOARD_MODE_DEBUG_ON:
-    debug = true;
-    break;
-  case SENSORBOARD_MODE_DEBUG_OFF:
-    if(debug){
-      debug = false;
-      Serial.println("turning debug off");
-    }
-    break;
-  }
-  
-
-  }else{
     return;
   }
 }
 
-void ErrorLights(){
+void handleSensorControllerCommand(unsigned char *msg_buffer, unsigned char len)
+{
+  if (msg_buffer[0] == JOINT_ID)
+  {
+    sensorControllerCommand *sensorCommand;
+    deSerializeSensorControllerCommand(msg_buffer, sensorCommand);
+
+    switch (sensorCommand->mode)
+    {
+    case SENSORBOARD_MODE_DEBUG_ON:
+      debug = true;
+      break;
+    case SENSORBOARD_MODE_DEBUG_OFF:
+      if (debug)
+      {
+        debug = false;
+        Serial.println("turning debug off");
+      }
+      break;
+    }
+  }
+  else
+  {
+    return;
+  }
+}
+
+void ErrorLights()
+{
   static bool toggled = false;
   static long blinkPeriod = 250;
-  if(millis() - blinkTime > blinkPeriod){
-    if(toggled){
-      for(int i = 0; i<12; i++){
+  if (millis() - blinkTime > blinkPeriod)
+  {
+    if (toggled)
+    {
+      for (int i = 0; i < 12; i++)
+      {
         FastLED.setBrightness(80);
         leds[i] = CRGB::Red;
-        
       }
       FastLED.show();
       toggled = false;
-    }else {
-      for(int i = 0; i<12; i++){
+    }
+    else
+    {
+      for (int i = 0; i < 12; i++)
+      {
         FastLED.setBrightness(50);
         leds[i] = CRGB::ForestGreen;
-        
       }
       FastLED.show();
       toggled = true;
     }
     blinkTime = millis();
   }
-  
 }
 
-void lightsOff(){
-	FastLED.setBrightness(0);
+void lightsOff()
+{
+  FastLED.setBrightness(0);
 
-  for(int i = 0; i<12; i++){
+  for (int i = 0; i < 12; i++)
+  {
     leds[i].r = CRGB::Black;
   }
   FastLED.show();
-      
 }
 
-void controlLightsRGB(uint8_t r, uint8_t g, uint8_t b){
-  for(int i = 0; i<12; i++){
-        leds[i].setRGB(r,g,b);
-        
-      }
-      FastLED.show();
+void controlLightsRGB(uint8_t r, uint8_t g, uint8_t b)
+{
+  for (int i = 0; i < 12; i++)
+  {
+    leds[i].setRGB(r, g, b);
+  }
+  FastLED.show();
 }
-void controlLightsHSV(uint8_t h, uint8_t s, uint8_t v){
-  for(int i = 0; i<12; i++){
-        leds[i].setHSV(h,s,v);
-      }
-      FastLED.show();
+void controlLightsHSV(uint8_t h, uint8_t s, uint8_t v)
+{
+  for (int i = 0; i < 12; i++)
+  {
+    leds[i].setHSV(h, s, v);
+  }
+  FastLED.show();
 }
-
-
-
-
-
-
-
