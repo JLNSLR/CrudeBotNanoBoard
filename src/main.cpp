@@ -27,7 +27,7 @@
 #define CAN_ID_SENSORCONTROLLER_COMMAND 0x08 //CAN-ID to identify sensor controller command
 
 /* --- Board Definitions --- */
-#define JOINT_ID 1
+#define JOINT_ID 0
 #define TORQUE_SENSOR_ID (JOINT_ID - 1)
 
 /* --- Hardware Definitions --- */
@@ -38,8 +38,8 @@
 
 #define LED_BUILTIN 13
 
-#define TORQUESENSOR_AVAILABLE
-#define LEDS_AVAILABLE
+//#define TORQUESENSOR_AVAILABLE
+//#define LEDS_AVAILABLE
 
 /*--- Global Data Structures --- */
 
@@ -208,12 +208,14 @@ void setup()
   // --- Initial State Paket Setup --- //
   state.encoderError = false;
   state.joint_id = JOINT_ID;
+#ifdef TORQUESENSOR_AVAILABLE
   state.torqueSensor_id = TORQUE_SENSOR_ID;
   state.torqueSensorGainVal = torqueSensorGain;
   state.torqueSensorOffsetVal = 0;
 
   encoderPaket.joint_id = JOINT_ID;
   torquePaket.joint_id = TORQUE_SENSOR_ID;
+#endif //TORQUESENSOR_AVAILABLE
 
   wdt_enable(WDTO_30MS); //start watchdog Timer, 30ms
 }
@@ -413,7 +415,7 @@ void handleEncoderZeroCommand(unsigned char *msg_buffer, unsigned char len)
     return;
   }
 }
-
+#ifdef TORQUESENSOR_AVAILABLE
 void handleTorqueSensorCommand(unsigned char *msg_buffer, unsigned char len)
 {
   if (msg_buffer[0] == JOINT_ID)
@@ -438,6 +440,7 @@ void handleTorqueSensorCommand(unsigned char *msg_buffer, unsigned char len)
     return;
   }
 }
+#endif //TORQUESENSOR_AVAILABLE
 
 void handleSensorControllerCommand(unsigned char *msg_buffer, unsigned char len)
 {
