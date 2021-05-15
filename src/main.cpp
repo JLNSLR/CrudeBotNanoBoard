@@ -11,7 +11,6 @@
 #include <FastLED.h>
 #include <EEPROM.h>
 #include <avr/wdt.h>
-
 #include <avr/pgmspace.h>
 
 /*--- Global Robot Definitions --- */
@@ -40,7 +39,7 @@
 #define LED_BUILTIN 13
 
 #define TORQUESENSOR_AVAILABLE
-#define LEDS_AVAILABLE
+//#define LEDS_AVAILABLE
 
 /*--- Global Data Structures --- */
 
@@ -98,7 +97,6 @@ void ErrorLights();
 void lightsOff();
 void controlLightsRGB(uint8_t r, uint8_t g, uint8_t b);
 void controlLightsHSV(uint8_t h, uint8_t s, uint8_t v);
-
 
 int16_t getEncoderOffset()
 {
@@ -217,8 +215,7 @@ void setup()
   encoderPaket.joint_id = JOINT_ID;
   torquePaket.joint_id = TORQUE_SENSOR_ID;
 
-  wdt_enable(WDTO_30MS); //start watchdog Timer, 1s
-  CAN.clearBufferTransmitIfFlags();
+  wdt_enable(WDTO_30MS); //start watchdog Timer, 30ms
 }
 
 void loop()
@@ -314,12 +311,18 @@ void loop()
       case CAN_ID_ENCODER_COMMAND:
         handleEncoderZeroCommand(msg_buffer, len);
         break;
+#ifdef TORQUESENSOR_AVAILABLE
       case CAN_ID_TORQUESENSOR_COMMAND:
         handleTorqueSensorCommand(msg_buffer, len);
         break;
+#endif // TORQUESENSOR_AVAILABLE
+
+#ifdef LEDS_AVAILABLE
       case CAN_ID_LIGHT_COMMAND:
         handleLightCommand(msg_buffer, len);
         break;
+#endif //LEDS_AVAILABLE
+
       case CAN_ID_SENSORCONTROLLER_COMMAND:
         handleSensorControllerCommand(msg_buffer, len);
         break;
@@ -328,18 +331,19 @@ void loop()
       readCANInputLastTime = micros();
     }
   }
-  wdt_reset();
 
+  wdt_reset();
   CAN.clearBufferTransmitIfFlags();
 
-  if (false)
-  {
 #ifdef LEDS_AVAILABLE
+  if (setup_error)
+  {
     ErrorLights();
-#endif //LEDS_AVAILABLE
-    //Serial.println(F("Error"));
   }
+#endif //LEDS_AVAILABLE
 }
+
+/* --- Function Implementations --- */
 
 void handleStatusRequest(unsigned char *msg_buffer, unsigned char len)
 {
@@ -465,6 +469,7 @@ void handleSensorControllerCommand(unsigned char *msg_buffer, unsigned char len)
   }
 }
 
+#ifdef LEDS_AVAILABLE
 void ErrorLights()
 {
   static bool toggled = false;
@@ -523,4 +528,4 @@ void controlLightsHSV(uint8_t h, uint8_t s, uint8_t v)
   FastLED.show();
 }
 
-
+#endif //LEDS_AVAILABLE
