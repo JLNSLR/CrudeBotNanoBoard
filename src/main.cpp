@@ -27,7 +27,7 @@
 #define CAN_ID_SENSORCONTROLLER_COMMAND 0x08 //CAN-ID to identify sensor controller command
 
 /* --- Board Definitions --- */
-#define JOINT_ID 5
+#define JOINT_ID 6
 #define TORQUE_SENSOR_ID (JOINT_ID - 1)
 
 /* --- Hardware Definitions --- */
@@ -39,7 +39,7 @@
 #define LED_BUILTIN 13
 
 #define TORQUESENSOR_AVAILABLE
-//#define LEDS_AVAILABLE
+#define LEDS_AVAILABLE
 
 /*--- Global Data Structures --- */
 
