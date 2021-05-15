@@ -28,7 +28,7 @@
 #define CAN_ID_SENSORCONTROLLER_COMMAND 0x08 //CAN-ID to identify sensor controller command
 
 /* --- Board Definitions --- */
-#define JOINT_ID 2
+#define JOINT_ID 5
 #define TORQUE_SENSOR_ID (JOINT_ID - 1)
 
 /* --- Hardware Definitions --- */
@@ -36,6 +36,8 @@
 #define ENCODERPIN 9
 #define LED_PIN 2 //HX_data
 #define NUM_LEDS 12
+
+#define LED_BUILTIN 13
 
 #define TORQUESENSOR_AVAILABLE
 #define LEDS_AVAILABLE
@@ -50,7 +52,7 @@ NAU7802 torqueSensor; //Create instance of the NAU7802 class
 int32_t torqueData;
 int32_t torqueOffset;
 torqueDataPacket torquePaket;
-uint8_t torqueSensorGain = NAU7802_GAIN_16;
+uint8_t torqueSensorGain = NAU7802_GAIN_32;
 #endif //TORQUESENSOR_AVAILABLE
 
 /*--- Magnetic rotary Encoder AS5048 --- */
@@ -70,15 +72,16 @@ jointSensorBoardState state;
 
 //Sample Periods
 #define EMPIRIC_DELAY 900
-const long encoderPeriod PROGMEM = 3333 - EMPIRIC_DELAY;      //3,33ms == 300Hz
-const long torqueSensorPeriod PROGMEM = 3333 - EMPIRIC_DELAY; //3,33ms == 300Hz
-const long ReadingCanInputsPeriod PROGMEM = 10000;            // 10ms = 100Hz
+const long encoderPeriod = 3333 - EMPIRIC_DELAY;      //3,33ms == 300Hz
+const long torqueSensorPeriod = 3333 - EMPIRIC_DELAY; //3,33ms == 300Hz
+const long ReadingCanInputsPeriod = 10000;            // 10ms = 100Hz
 
 //Sample Period Tracking Variables
 long encoderLastTime = 0;
 long torqueLastTime = 0;
 long readCANInputLastTime = 0;
 long blinkTime = 0;
+long blinkTime2 = 0;
 
 /*--- System state flags --- */
 bool debug = true;
@@ -96,6 +99,7 @@ void lightsOff();
 void controlLightsRGB(uint8_t r, uint8_t g, uint8_t b);
 void controlLightsHSV(uint8_t h, uint8_t s, uint8_t v);
 
+
 int16_t getEncoderOffset()
 {
   int16_t offset;
@@ -111,9 +115,12 @@ void storeEncoderOffset(int16_t offset)
 void setup()
 {
   Serial.begin(115200);
+  pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, HIGH);
 
   /* --- Initialize Sensors --- */
   encoder.init(); //Encoder
+  sei();
 
   Serial.println(F("Encoder initialized: "));
   encoder.printErrors();
@@ -122,20 +129,26 @@ void setup()
 //Torque Sensor Initialization
 #ifdef TORQUESENSOR_AVAILABLE
   Wire.begin();
-  if (torqueSensor.begin())
+  for (int i = 5; i++; i++)
   {
-    Serial.println(F("NAU7802 initialized"));
-    torqueSensor.setSampleRate(320);
-    torqueSensor.setGain(torqueSensorGain);
-  }
-  else
-  {
-    Serial.println(F("NAU7802 initialization failed"));
+    if (torqueSensor.begin())
+    {
+      Serial.println(F("NAU7802 initialized"));
+      torqueSensor.setSampleRate(320);
+      torqueSensor.setGain(torqueSensorGain);
+      torqueSensor.calibrateAFE();
+      delay(10);
+      break;
+    }
+    else
+    {
+      Serial.println(F("NAU7802 initialization failed"));
+    }
   }
 #endif //TORQUESENSOR_AVAILABLE
 
   /* --- Initialize CAN Communication --- */
-  for (int i = 0; i < 100; i++)
+  for (int i = 0; i < 10; i++)
   {
     if (CAN_OK == CAN.begin(CAN_1000KBPS, MCP_8MHz))
     { // init can bus : baudrate = 1000k
@@ -160,8 +173,7 @@ void setup()
     {
       Serial.println(F("CAN BUS Shield init fail"));
       Serial.println(F("Init CAN BUS Shield again"));
-      delay(5);
-      if (i == 99)
+      if (i == 9)
       {
         setup_error = true;
       }
@@ -205,7 +217,8 @@ void setup()
   encoderPaket.joint_id = JOINT_ID;
   torquePaket.joint_id = TORQUE_SENSOR_ID;
 
-  wdt_enable(WDTO_1S); //start watchdog Timer, 1s
+  wdt_enable(WDTO_30MS); //start watchdog Timer, 1s
+  CAN.clearBufferTransmitIfFlags();
 }
 
 void loop()
@@ -242,7 +255,7 @@ void loop()
     if (debug && !setup_error)
     {
       Serial.print(F("Reading Encoder Value: "));
-      Serial.println(encoder.getRotation());
+      Serial.println(encoderPaket.encoderValue);
     }
   }
 
@@ -250,22 +263,35 @@ void loop()
   if (micros() - torqueLastTime >= torqueSensorPeriod)
   {
 
-    int32_t torqueValue = torqueSensor.getReading();
-
-    torquePaket.torqueValue = torqueValue;
-
-    //Serialize the TorqueData for Sending
-    uint8_t torque_bytes[TORQUEPAKET_SIZE];
-    serializeTorqueData(torque_bytes, &torquePaket);
-
-    //send Torquesensor Data via CAN BUS
-    CAN.sendMsgBuf(CAN_ID_TORQUESENSOR, 0, TORQUEPAKET_SIZE, torque_bytes);
-    torqueLastTime = micros();
-
-    if (debug)
+    if (torqueSensor.available())
     {
-      Serial.print(F("Reading Torque Value: "));
-      Serial.println(torqueValue);
+      int32_t torqueValue = torqueSensor.getReading();
+
+      if (torqueValue == 0)
+      {
+        torqueSensor.begin();
+        torqueSensor.setSampleRate(320);
+        torqueSensor.setGain(torqueSensorGain);
+        torqueSensor.calibrateAFE();
+      }
+      else
+      {
+        torquePaket.torqueValue = torqueValue;
+
+        //Serialize the TorqueData for Sending
+        uint8_t torque_bytes[TORQUEPAKET_SIZE];
+        serializeTorqueData(torque_bytes, &torquePaket);
+
+        //send Torquesensor Data via CAN BUS
+        CAN.sendMsgBuf(CAN_ID_TORQUESENSOR, 0, TORQUEPAKET_SIZE, torque_bytes);
+        torqueLastTime = micros();
+
+        if (debug)
+        {
+          Serial.print(F("Reading Torque Value: "));
+          Serial.println(torqueValue);
+        }
+      }
     }
   }
 #endif //TORQUESENSOR_AVAILABLE
@@ -302,15 +328,16 @@ void loop()
       readCANInputLastTime = micros();
     }
   }
-
   wdt_reset();
 
-  if (setup_error)
+  CAN.clearBufferTransmitIfFlags();
+
+  if (false)
   {
 #ifdef LEDS_AVAILABLE
     ErrorLights();
 #endif //LEDS_AVAILABLE
-    Serial.println(F("Error"));
+    //Serial.println(F("Error"));
   }
 }
 
@@ -424,8 +451,11 @@ void handleSensorControllerCommand(unsigned char *msg_buffer, unsigned char len)
       if (debug)
       {
         debug = false;
-        Serial.println("turning debug off");
+        Serial.println(F("turning debug off"));
       }
+      break;
+    case SENSORBOARD_MODE_RESET_CALL:
+      delay(100);
       break;
     }
   }
@@ -492,3 +522,5 @@ void controlLightsHSV(uint8_t h, uint8_t s, uint8_t v)
   }
   FastLED.show();
 }
+
+

@@ -65,6 +65,7 @@ struct lightCommand
 #define SENSORCONTROLLER_COMMAND_SIZE 2
 #define SENSORBOARD_MODE_DEBUG_ON 0
 #define SENSORBOARD_MODE_DEBUG_OFF 1
+#define SENSORBOARD_MODE_RESET_CALL 2
 struct sensorControllerCommand
 {
     uint8_t joint_id;
