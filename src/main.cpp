@@ -27,7 +27,7 @@
 #define CAN_ID_SENSORCONTROLLER_COMMAND 0x08 //CAN-ID to identify sensor controller command
 
 /* --- Board Definitions --- */
-#define JOINT_ID 4
+#define JOINT_ID 3
 #define TORQUE_SENSOR_ID (JOINT_ID - 1)
 
 /* --- Hardware Definitions --- */
