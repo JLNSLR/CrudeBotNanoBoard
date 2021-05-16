@@ -83,7 +83,7 @@ long blinkTime = 0;
 long blinkTime2 = 0;
 
 /*--- System state flags --- */
-bool debug = true;
+bool debug = false;
 bool setup_error = false;
 
 /* --- Sensor Board functions --- */
