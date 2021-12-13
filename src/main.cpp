@@ -1,5 +1,5 @@
-/*  Code to run on the Arduino Nano PCB, which controls and collects 
-    Joint Sensor Data and sends it via CAN-BUS to the main processor. 
+/*  Code to run on the Arduino Nano PCB, which controls and collects
+    Joint Sensor Data and sends it via CAN-BUS to the main processor.
     Main Function should be the same for every CAN-Board.
 */
 #include <mcp_can.h>
@@ -16,15 +16,15 @@
 /*--- Global Robot Definitions --- */
 
 /*--- CAN-Network Definitions --- */
-#define CAN_ID_ENCODERDATA 0x00   //CAN-ID to identify encoder-angle-data of tje joint
-#define CAN_ID_TORQUESENSOR 0x01  //CAN-ID to identify torque-sensor-data of joint j-1;
+#define CAN_ID_ENCODERDATA 0x00   // CAN-ID to identify encoder-angle-data of tje joint
+#define CAN_ID_TORQUESENSOR 0x01  // CAN-ID to identify torque-sensor-data of joint j-1;
 #define CAN_ID_ENCODER_ERROR 0x02 // CAN_ID to identify Encoder Error-States
-#define CAN_ID_STATUS_MSG 0x03    //CAN-ID to identify status-msgs from the joint-sensors
+#define CAN_ID_STATUS_MSG 0x03    // CAN-ID to identify status-msgs from the joint-sensors
 #define CAN_ID_STATUS_REQUEST 0x04
 #define CAN_ID_LIGHT_COMMAND 0x05
-#define CAN_ID_ENCODER_COMMAND 0x06          //CAN-ID to identify command
-#define CAN_ID_TORQUESENSOR_COMMAND 0x07     //CAN-ID to identify torque sensor command
-#define CAN_ID_SENSORCONTROLLER_COMMAND 0x08 //CAN-ID to identify sensor controller command
+#define CAN_ID_ENCODER_COMMAND 0x06          // CAN-ID to identify command
+#define CAN_ID_TORQUESENSOR_COMMAND 0x07     // CAN-ID to identify torque sensor command
+#define CAN_ID_SENSORCONTROLLER_COMMAND 0x08 // CAN-ID to identify sensor controller command
 
 /* --- Board Definitions --- */
 #define JOINT_ID 5
@@ -33,7 +33,7 @@
 /* --- Hardware Definitions --- */
 #define CAN_PIN 10
 #define ENCODERPIN 9
-#define LED_PIN 2 //HX_data
+#define LED_PIN 2 // HX_data
 #define NUM_LEDS 12
 
 #define LED_BUILTIN 13
@@ -47,12 +47,12 @@ CRGB leds[NUM_LEDS];
 
 #ifdef TORQUESENSOR_AVAILABLE
 /*--- Torque Sensor width NAU7802-Amplifier and ADC --- */
-NAU7802 torqueSensor; //Create instance of the NAU7802 class
+NAU7802 torqueSensor; // Create instance of the NAU7802 class
 int32_t torqueData;
 int32_t torqueOffset;
 torqueDataPacket torquePaket;
-uint8_t torqueSensorGain = NAU7802_GAIN_32;
-#endif //TORQUESENSOR_AVAILABLE
+uint8_t torqueSensorGain = NAU7802_GAIN_64;
+#endif // TORQUESENSOR_AVAILABLE
 
 /*--- Magnetic rotary Encoder AS5048 --- */
 int16_t encoderData;
@@ -69,13 +69,13 @@ jointSensorBoardState state;
 
 /*--- Realtime Timing Parameters --- */
 
-//Sample Periods
+// Sample Periods
 #define EMPIRIC_DELAY 900
-const long encoderPeriod = 3333 - EMPIRIC_DELAY;      //3,33ms == 300Hz
-const long torqueSensorPeriod = 3333 - EMPIRIC_DELAY; //3,33ms == 300Hz
+const long encoderPeriod = 3333 - EMPIRIC_DELAY;      // 3,33ms == 300Hz
+const long torqueSensorPeriod = 3333 - EMPIRIC_DELAY; // 3,33ms == 300Hz
 const long ReadingCanInputsPeriod = 10000;            // 10ms = 100Hz
 
-//Sample Period Tracking Variables
+// Sample Period Tracking Variables
 long encoderLastTime = 0;
 long torqueLastTime = 0;
 long readCANInputLastTime = 0;
@@ -117,14 +117,14 @@ void setup()
   digitalWrite(LED_BUILTIN, HIGH);
 
   /* --- Initialize Sensors --- */
-  encoder.init(); //Encoder
+  encoder.init(); // Encoder
   sei();
 
   Serial.println(F("Encoder initialized: "));
   encoder.printErrors();
   encoder.printState();
 
-//Torque Sensor Initialization
+// Torque Sensor Initialization
 #ifdef TORQUESENSOR_AVAILABLE
   Wire.begin();
   for (int i = 5; i++; i++)
@@ -143,7 +143,7 @@ void setup()
       Serial.println(F("NAU7802 initialization failed"));
     }
   }
-#endif //TORQUESENSOR_AVAILABLE
+#endif // TORQUESENSOR_AVAILABLE
 
   /* --- Initialize CAN Communication --- */
   for (int i = 0; i < 10; i++)
@@ -153,7 +153,7 @@ void setup()
       Serial.println(F("CAN BUS Shield init successful!"));
 
       //--- Set Masks --- //
-      CAN.init_Mask(0, 0, 0x7FF); //all ID Bits are relevant
+      CAN.init_Mask(0, 0, 0x7FF); // all ID Bits are relevant
       CAN.init_Mask(1, 0, 0x7FF);
 
       //--- Set Filters --- //
@@ -188,7 +188,7 @@ void setup()
     leds[i] = CRGB::Orange;
   }
   FastLED.show();
-#endif //LEDS_AVAILABLE
+#endif // LEDS_AVAILABLE
 
   if (setup_error)
   {
@@ -215,7 +215,7 @@ void setup()
   encoderPaket.joint_id = JOINT_ID;
   torquePaket.joint_id = TORQUE_SENSOR_ID;
 
-  wdt_enable(WDTO_30MS); //start watchdog Timer, 30ms
+  wdt_enable(WDTO_120MS); // start watchdog Timer, 30ms
 }
 
 void loop()
@@ -223,14 +223,14 @@ void loop()
 
   if (micros() - encoderLastTime >= encoderPeriod)
   {
-    //Read Value from Sensor and put it into the buffer
+    // Read Value from Sensor and put it into the buffer
     encoderPaket.encoderValue = encoder.getRotation();
 
-    //Serialize the encoderData for Sending
+    // Serialize the encoderData for Sending
     uint8_t bytes[ENCODERPAKET_SIZE];
     serializeEncoderData(bytes, &encoderPaket);
 
-    //Send Encoder Data via CAN BUS
+    // Send Encoder Data via CAN BUS
     CAN.sendMsgBuf(CAN_ID_ENCODERDATA, 0, ENCODERPAKET_SIZE, bytes);
     encoderLastTime = micros();
 
@@ -275,11 +275,11 @@ void loop()
       {
         torquePaket.torqueValue = torqueValue;
 
-        //Serialize the TorqueData for Sending
+        // Serialize the TorqueData for Sending
         uint8_t torque_bytes[TORQUEPAKET_SIZE];
         serializeTorqueData(torque_bytes, &torquePaket);
 
-        //send Torquesensor Data via CAN BUS
+        // send Torquesensor Data via CAN BUS
         CAN.sendMsgBuf(CAN_ID_TORQUESENSOR, 0, TORQUEPAKET_SIZE, torque_bytes);
         torqueLastTime = micros();
 
@@ -291,7 +291,7 @@ void loop()
       }
     }
   }
-#endif //TORQUESENSOR_AVAILABLE
+#endif // TORQUESENSOR_AVAILABLE
 
   if (micros() - readCANInputLastTime >= ReadingCanInputsPeriod)
   {
@@ -321,7 +321,7 @@ void loop()
       case CAN_ID_LIGHT_COMMAND:
         handleLightCommand(msg_buffer, len);
         break;
-#endif //LEDS_AVAILABLE
+#endif // LEDS_AVAILABLE
 
       case CAN_ID_SENSORCONTROLLER_COMMAND:
         handleSensorControllerCommand(msg_buffer, len);
@@ -340,7 +340,7 @@ void loop()
   {
     ErrorLights();
   }
-#endif //LEDS_AVAILABLE
+#endif // LEDS_AVAILABLE
 }
 
 /* --- Function Implementations --- */
@@ -362,6 +362,8 @@ void handleStatusRequest(unsigned char *msg_buffer, unsigned char len)
 
 void handleLightCommand(unsigned char *msg_buffer, unsigned char len)
 {
+
+#ifdef LEDS_AVAILABLE
   if (msg_buffer[0] == JOINT_ID)
   {
     lightCommand *lightCommand;
@@ -391,6 +393,7 @@ void handleLightCommand(unsigned char *msg_buffer, unsigned char len)
   {
     return;
   }
+#endif
 };
 
 void handleEncoderZeroCommand(unsigned char *msg_buffer, unsigned char len)
@@ -528,4 +531,4 @@ void controlLightsHSV(uint8_t h, uint8_t s, uint8_t v)
   FastLED.show();
 }
 
-#endif //LEDS_AVAILABLE
+#endif // LEDS_AVAILABLE
