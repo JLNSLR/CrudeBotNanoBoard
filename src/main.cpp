@@ -148,7 +148,7 @@ void setup()
   /* --- Initialize CAN Communication --- */
   for (int i = 0; i < 10; i++)
   {
-    if (CAN_OK == CAN.begin(CAN_1000KBPS, MCP_8MHz))
+    if (CAN_OK == CAN.begin(CAN_500KBPS, MCP_8MHz))
     { // init can bus : baudrate = 1000k
       Serial.println(F("CAN BUS Shield init successful!"));
 
