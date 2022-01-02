@@ -38,7 +38,7 @@
 
 #define LED_BUILTIN 13
 
-#define TORQUESENSOR_AVAILABLE
+//#define TORQUESENSOR_AVAILABLE
 //#define LEDS_AVAILABLE
 
 /*--- Global Data Structures --- */
@@ -148,7 +148,7 @@ void setup()
   /* --- Initialize CAN Communication --- */
   for (int i = 0; i < 10; i++)
   {
-    if (CAN_OK == CAN.begin(CAN_1000KBPS, MCP_8MHz))
+    if (CAN_OK == CAN.begin(CAN_500KBPS, MCP_8MHz))
     { // init can bus : baudrate = 1000k
       Serial.println(F("CAN BUS Shield init successful!"));
 
@@ -208,12 +208,19 @@ void setup()
   // --- Initial State Paket Setup --- //
   state.encoderError = false;
   state.joint_id = JOINT_ID;
+
+#ifdef TORQUESENSOR_AVAILABLE
   state.torqueSensor_id = TORQUE_SENSOR_ID;
   state.torqueSensorGainVal = torqueSensorGain;
   state.torqueSensorOffsetVal = 0;
 
+#endif
+
   encoderPaket.joint_id = JOINT_ID;
+
+#ifdef TORQUESENSOR_AVAILABÖE
   torquePaket.joint_id = TORQUE_SENSOR_ID;
+#endif
 
   wdt_enable(WDTO_120MS); // start watchdog Timer, 30ms
 }
@@ -431,10 +438,11 @@ void handleTorqueSensorCommand(unsigned char *msg_buffer, unsigned char len)
       Serial.print(F("Setting Torque Offset to: "));
       Serial.println(torqueSensorCommand->offset);
     }
-
+#ifdef TORQUESENSOR_AVAILABLE
     torqueSensor.setGain(torqueSensorCommand->gain);
     torqueSensorGain = torqueSensorCommand->gain;
     torqueOffset = torqueSensorCommand->offset;
+#endif
   }
   else
   {
